@@ -4,17 +4,19 @@ import pandas as pd
 import numpy as np
 import pickle
 import os
+import gzip
+import shutil
 from Bio import pairwise2
+from Bio.PDB import MMCIFParser, PDBIO, PDBParser
 from math import isnan
 from tqdm import tqdm
 from dataclasses import dataclass
 from typing import Optional
-
 from protein_mpnn_utils import alt_parse_PDB, parse_PDB
 from cache import cache
 
 
-ALPHABET = 'ACDEFGHIKLMNPQRSTVWY-'
+ALPHABET = 'ACDEFGHIKLMNPQRSTVWYX'
 
 
 @cache(lambda cfg, pdb_file: pdb_file)
@@ -335,5 +337,71 @@ class ComboDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         return self.mut_dataset[index]
+    
+class SiteSaturationDataset(torch.utils.data.Dataset):
 
+    def __init__(self, structure_dir, chain_id='A', extensions=('.pdb', '.cif', '.pdb.gz', '.cif.gz')):
+        """
+        Dataset for site-saturation mutagenesis over structure files (AlphaFold or PDB).
 
+        Args:
+            structure_dir (str): Directory containing structure files (.cif or .pdb).
+            chain_id (str): Chain identifier (usually 'A').
+        """
+        self.structure_dir = structure_dir
+        self.chain_id = chain_id
+        self.extensions = extensions
+        self.structure_files = [
+            f for f in os.listdir(structure_dir)
+            if f.lower().endswith(extensions)
+        ]
+        self.structure_files.sort()
+    
+    def __len__(self):
+        return len(self.structure_files)
+    
+    def __getitem__(self, index):
+        import tempfile
+        structure_filename = self.structure_files[index]
+        pdb_id = structure_filename.split(".")[0]
+        structure_path = os.path.join(self.structure_dir, structure_filename)
+        tmp_path = os.path.join(tempfile.gettempdir(), f"{pdb_id}.pdb")
+        if structure_path.endswith(".gz"):
+            with gzip.open(structure_path, "rt") as f_in:
+                if structure_path.endswith(".cif.gz"):
+                    parser = MMCIFParser(QUIET=True)
+                    structure = parser.get_structure(pdb_id, f_in)
+                    io = PDBIO()
+                    io.set_structure(structure)
+                    io.save(tmp_path)
+                else:
+                    shutil.copyfileobj(f_in, tmp_path)
+                
+        elif structure_path.endswith(".cif"):
+            parser = MMCIFParser(QUIET=True)
+            structure = parser.get_structure(pdb_id, structure_path)
+            io = PDBIO()
+            io.set_structure(structure)
+            io.save(tmp_path)
+        else:
+            tmp_path = structure_path
+
+        try:
+            pdb = alt_parse_PDB(tmp_path, input_chain_list=[self.chain_id])
+        except Exception as e:
+            raise RuntimeError(f"Failed to parse structure {structure_path}: {e}")
+        finally:
+            if tmp_path != structure_path:
+                os.remove(tmp_path)  # Clean up temporary .pdb file if it was generated
+        
+        sequence = pdb[0]["seq"]
+        mutations = []
+
+        for i, wt_res in enumerate(sequence):
+            if wt_res != '':
+                for mut_res in ALPHABET[:-1]:
+                    mutations.append(Mutation(position=i, wildtype=wt_res, mutation=mut_res, ddG=None, pdb=pdb_id))
+            else:
+                mutations.append(None)
+
+        return pdb, mutations
