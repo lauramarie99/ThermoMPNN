@@ -81,7 +81,7 @@ def main(cfg, args):
                 for mut, out in zip(final_mutation_list, pred):
                     if mut is not None:
                         raw_pred_df.loc[len(raw_pred_df)] = {
-                            'ddG_pred': out["ddG"].cpu().item(),
+                            'ddG_pred': round(out["ddG"].cpu().item(),4),
                             'position': mut.position,
                             'wildtype': mut.wildtype,
                             'mutation': mut.mutation,
@@ -103,7 +103,7 @@ def main(cfg, args):
                 print('Mutations processed:', raw_pred_df.shape)
 
                 os.makedirs(args.outdir, exist_ok=True)
-                outfile = os.path.join(args.outdir, f"{name}_{pdb_id}_preds.csv")
+                outfile = os.path.join(args.outdir, f"{name}_{pdb_id}.csv")
                 if not args.compressed:
                     raw_pred_df.to_csv(outfile)
                 else:
