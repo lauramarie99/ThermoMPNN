@@ -57,6 +57,7 @@ def main(cfg, args):
         datasets["SSM-PDB"] = SiteSaturationDataset(structure_dir=args.structure_dir, chain_id=chain_id)
 
     max_batches = None
+    failed = []
 
     for name, model in models.items():
         model = model.eval()
@@ -99,9 +100,6 @@ def main(cfg, args):
 
                     if max_batches is not None and i >= max_batches:
                         break
-
-                    print('Completed protein:', mut.pdb)
-
                     os.makedirs(args.outdir, exist_ok=True)
                     outfile = os.path.join(args.outdir, f"{name}_{pdb_id}.csv")
                     if not args.compressed:
@@ -109,10 +107,13 @@ def main(cfg, args):
                     else:
                         raw_pred_df.to_csv(outfile + ".gz", index=False, compression="gzip")
                     del raw_pred_df
-                    print(f"Saved predictions to {outfile}")
+
                 except Exception as e:
                     print(f"[ERROR] Failed to process protein {pdb_id}: {e}")
+                    failed.append(pdb_id)
                     continue
+                
+    print("Failed proteins:", failed)
 
 
 if __name__ == "__main__":
