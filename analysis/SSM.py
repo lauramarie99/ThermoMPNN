@@ -64,52 +64,55 @@ def main(cfg, args):
         for dataset_name, dataset in datasets.items():
             print('Running model %s on dataset %s' % (name, dataset_name))
             for i, batch in enumerate(tqdm(dataset)):
-                raw_pred_df = pd.DataFrame(columns=['model', 'dataset', 'pdb', 'chain', 'position', 'wildtype', 'mutation',
-                                                    'ddG_pred', 'neighbors'])
-                mut_pdb, mutations = batch
-                pdb_id = mut_pdb[0].get("name", f"protein_{i}")
-                final_mutation_list = mutations
+                try:
+                    raw_pred_df = pd.DataFrame(columns=['model', 'dataset', 'pdb', 'chain', 'position', 'wildtype', 'mutation',
+                                                        'ddG_pred', 'neighbors'])
+                    mut_pdb, mutations = batch
+                    pdb_id = mut_pdb[0].get("name", f"protein_{i}")
+                    final_mutation_list = mutations
 
-                pred, _ = model(mut_pdb, final_mutation_list)
+                    pred, _ = model(mut_pdb, final_mutation_list)
 
-                # calculation of N neighbors
-                if args.centrality:
-                    coord_chain = [c for c in mut_pdb[0].keys() if 'coords' in c][0]
-                    chain = coord_chain[-1]
-                    neighbors = compute_centrality(mut_pdb[0][coord_chain], basis_atom='CA', backup_atom='C', chain=chain, radius=10.)
-                
-                for mut, out in zip(final_mutation_list, pred):
-                    if mut is not None:
-                        raw_pred_df.loc[len(raw_pred_df)] = {
-                            'ddG_pred': round(out["ddG"].cpu().item(),4),
-                            'position': mut.position,
-                            'wildtype': mut.wildtype,
-                            'mutation': mut.mutation,
-                            'pdb': mut.pdb.strip('.pdb'),
-                            'chain': chain_id,
-                            'model': name,
-                            'dataset': dataset_name,
-                            'neighbors': neighbors[mut.position].cpu().item() if args.centrality else None,
-                            'best_AA': ''  # placeholder for later
-                        }
+                    # calculation of N neighbors
+                    if args.centrality:
+                        coord_chain = [c for c in mut_pdb[0].keys() if 'coords' in c][0]
+                        chain = coord_chain[-1]
+                        neighbors = compute_centrality(mut_pdb[0][coord_chain], basis_atom='CA', backup_atom='C', chain=chain, radius=10.)
+                    
+                    for mut, out in zip(final_mutation_list, pred):
+                        if mut is not None:
+                            raw_pred_df.loc[len(raw_pred_df)] = {
+                                'ddG_pred': round(out["ddG"].cpu().item(),4),
+                                'position': mut.position,
+                                'wildtype': mut.wildtype,
+                                'mutation': mut.mutation,
+                                'pdb': mut.pdb.strip('.pdb'),
+                                'chain': chain_id,
+                                'model': name,
+                                'dataset': dataset_name,
+                                'neighbors': neighbors[mut.position].cpu().item() if args.centrality else None,
+                                'best_AA': ''  # placeholder for later
+                            }
 
-                if not args.include_cys:
-                    raw_pred_df = raw_pred_df.loc[raw_pred_df['mutation'] != 'C']
+                    if not args.include_cys:
+                        raw_pred_df = raw_pred_df.loc[raw_pred_df['mutation'] != 'C']
 
-                if max_batches is not None and i >= max_batches:
-                    break
+                    if max_batches is not None and i >= max_batches:
+                        break
 
-                print('Completed protein:', mut.pdb)
-                print('Mutations processed:', raw_pred_df.shape)
+                    print('Completed protein:', mut.pdb)
 
-                os.makedirs(args.outdir, exist_ok=True)
-                outfile = os.path.join(args.outdir, f"{name}_{pdb_id}.csv")
-                if not args.compressed:
-                    raw_pred_df.to_csv(outfile)
-                else:
-                    raw_pred_df.to_csv(outfile + ".gz", index=False, compression="gzip")
-                del raw_pred_df
-                print(f"Saved predictions to {outfile}")
+                    os.makedirs(args.outdir, exist_ok=True)
+                    outfile = os.path.join(args.outdir, f"{name}_{pdb_id}.csv")
+                    if not args.compressed:
+                        raw_pred_df.to_csv(outfile)
+                    else:
+                        raw_pred_df.to_csv(outfile + ".gz", index=False, compression="gzip")
+                    del raw_pred_df
+                    print(f"Saved predictions to {outfile}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to process protein {pdb_id}: {e}")
+                    continue
 
 
 if __name__ == "__main__":
