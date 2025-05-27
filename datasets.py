@@ -398,7 +398,7 @@ class SiteSaturationDataset(torch.utils.data.Dataset):
         mutations = []
 
         for i, wt_res in enumerate(sequence):
-            if wt_res != '':
+            if wt_res != '-':
                 for mut_res in ALPHABET[:-1]:
                     mutations.append(Mutation(position=i, wildtype=wt_res, mutation=mut_res, ddG=None, pdb=pdb_id))
             else:
