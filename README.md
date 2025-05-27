@@ -1,3 +1,12 @@
+# Info
+Changes have been made to the original code to allow ThermoMPNN to run on a large data set of AlphaFold structures by simply specifying an input folder.
+```
+python analysis/SSM.py \
+  --structure_dir /workspaces/work/Input \
+  --outdir /workspaces/work/Output \
+  --include_cys --compressed
+```
+
 # ThermoMPNN
 ThermoMPNN is a graph neural network (GNN) trained using transfer learning to predict changes in stability for protein point mutants.
 
